@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const userModel = require("./model/user.model.js");
 const postModel = require("./model/post.model.js");
 const cookieParser = require("cookie-parser");
@@ -6,12 +7,14 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const session = require("express-session");
 const flash = require("connect-flash");
+const upload = require("./config/multerconfig.js");
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
 app.use(cookieParser());
+app.use(express.static(path.join(__dirname, "public")));
 
 app.use(
   session({
@@ -31,6 +34,22 @@ app.use((req, res, next) => {
 app.get("/", function (req, res) {
   res.render("index");
 });
+
+app.get("/profile/upload", function (req, res) {
+  res.render("profileupload");
+});
+
+app.post(
+  "/upload-profile",
+  isLoggedIn,
+  upload.single("profilepic"),
+  async function (req, res) {
+    let user = await userModel.findOne({ email: req.user.email });
+    user.profilepic = req.file.filename;
+    await user.save();
+    res.redirect("/profile")
+  }
+);
 
 app.get("/login", function (req, res) {
   res.render("login");
@@ -72,12 +91,12 @@ app.get("/edit/:id", isLoggedIn, async function (req, res) {
 app.post("/update/:id", isLoggedIn, async function (req, res) {
   try {
     const { title, content } = req.body;
-    
+
     // Update the post where ID matches
     await postModel.findOneAndUpdate(
-        { _id: req.params.id }, 
-        { title, content }, 
-        { new: true }
+      { _id: req.params.id },
+      { title, content },
+      { new: true }
     );
 
     req.flash("success", "Post updated successfully!");
@@ -101,35 +120,47 @@ app.post("/create-post", isLoggedIn, async function (req, res) {
   res.redirect("/profile");
 });
 
-app.post("/register", async function (req, res) {
-  let { email, password, age, name, username, gender } = req.body;
-  let user = await userModel.findOne({ email });
-  if (user) {
-    return res.status(500).send({
-      message: "User already registered",
+
+app.post("/register", upload.single("profilepic"), async function (req, res) {
+  try {
+    let { email, password, age, name, username, gender } = req.body;
+    
+    // 1. Check if user exists
+    let user = await userModel.findOne({ email });
+    if (user) {
+      req.flash("error", "User already registered");
+      return res.redirect("/login");
+    }
+
+    // 2. Hash Password
+    let hashPassword = await bcrypt.hash(password, 10);
+
+    // 3. Create User with Profile Picture
+    // If no file is uploaded, req.file will be undefined. 
+    // You can set a default or handle it as an error.
+    let createUser = await userModel.create({
+      username,
+      name,
+      email,
+      password: hashPassword,
+      age,
+      gender,
+      profilepic: req.file ? req.file.filename : "default.png", 
     });
+
+    // 4. Generate Token
+    let token = jwt.sign({ email, userid: createUser._id }, "shhhh", {
+      expiresIn: "1h",
+    });
+
+    res.cookie("token", token, { httpOnly: true, secure: true });
+
+    req.flash("success", "User registered successfully!");
+    res.redirect("/login"); // Logged in and redirected to profile
+  } catch (error) {
+    req.flash("error", "Registration failed. Try again.");
+    res.redirect("/");
   }
-
-  let hashPassword = await bcrypt.hash(password, 10);
-
-  let createUser = await userModel.create({
-    username,
-    name,
-    email,
-    password: hashPassword,
-    age,
-    gender,
-  });
-
-  let token = jwt.sign({ email, userid: createUser._id }, "shhhh", {
-    expiresIn: "1h",
-  });
-
-  res.cookie("token", token, { httpOnly: true, secure: true });
-
-  res
-    .status(201)
-    .send({ message: "User registered successfully", user: createUser });
 });
 
 app.post("/login", async function (req, res) {
