@@ -5,7 +5,7 @@ export const isLoggedIn = async (req, res, next) => {
   try {
     console.log(req.cookies);
     const token = req.cookies?.token;
-    console.log("Token found", token ? "yes" : "No");
+    console.log("Token found:", token ? "yes" : "No");
 
     if (!token) {
       console.log("No token");

@@ -156,7 +156,7 @@ const login = async (req, res) => {
       process.env.JWT_SECRET,
       {
         expiresIn: process.env.JWT_EXPIRES,
-      }
+      },
     );
 
     const cookieOptions = {
@@ -225,21 +225,21 @@ const forgotPassword = async (req, res) => {
 };
 const resetPassword = async (req, res) => {
   try {
-    // collect token from params
-    // password from re.body
     const { token } = req.params;
     const { password } = req.body;
 
-    try {
-      const user = await User.findOne({
-        resetPasswordToken: token,
-        resetPasswordExpires: { $gt: Date.now() },
-      });
+    if (!password) {
+      return res.status(400).json({ message: "password is required" });
+    }
 
-      // set password in user
-      // resetToken , resetExpiry ==> reset/empty
-      // save
-    } catch (error) {}
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    // set password in user
+    // resetToken , resetExpiry ==> reset/empty
+    // save
   } catch (error) {}
 };
 
